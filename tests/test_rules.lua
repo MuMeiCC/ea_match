@@ -1,0 +1,61 @@
+local R = dofile(ROOT .. "/scripts/rules.lua")
+local checks = 0
+local function eq(actual, expected, label)
+    checks = checks + 1
+    assert(actual == expected, (label or "score") .. ": expected " .. tostring(expected) .. ", got " .. tostring(actual))
+end
+
+for _, pair in ipairs({{0,0},{20,100},{21,102},{99,258},{100,259},{999,1158}}) do
+    eq(R.inventory({coins=pair[1]}, false).coins, pair[2], "coin boundary")
+end
+eq(R.inventory({bombs=11, keys=99}, false).bombs, 103)
+eq(R.inventory({bombs=11, keys=99}, false).keys, 367)
+eq(R.inventory({pockets=4}, false).consumables, 80)
+eq(R.inventory({red=5, rotten=1, soul=3, bone=1, eternal=1, golden=1}, false).hearts,
+    75+60+90+10+60+100, "remaining health with rotten heart")
+eq(R.inventory({red=24, soul=24, golden=3, bone=6}, true).hearts, 0, "death ignores all health")
+eq(R.inventory({trinkets=3, goldTrinkets=2}, false).trinkets, 140)
+eq(R.inventory({items={{id=330,count=2,quality=2}}}, false).items, 300, "duplicate Soy Milk")
+eq(R.inventory({items={{id=168,count=1,quality=4}}}, false).items, 150, "Q4 and special stack")
+eq(R.inventory({items={{id=358,count=2,quality=0},{id=245,count=1,quality=4}}}, false).items, 500, "The Wiz ID")
+eq(R.inventory({items={{id=482,count=1,quality=0},{id=636,count=1,quality=4},{id=721,count=1,quality=4}}}, false).items, 0)
+eq(R.inventory({forms=3}, false).forms, 300)
+
+local m = R.newMatch(1)
+R.startRun(m, "seed1")
+m.elapsedMs = 3601000
+eq(R.preview(m, {}, false), -1, "overtime remains playable")
+local first = R.settle(m, {}, true, "death")
+eq(first.total, -1)
+eq(m.best, -1, "negative high score is not clamped to zero")
+eq(m.deaths, 1)
+eq(R.settle(m, {}, true, "duplicate"), nil)
+eq(m.deaths, 1, "double callback cannot double death")
+R.startRun(m, "seed2")
+eq(m.run.bossPoints, 0)
+eq(m.run.penaltyDeaths, 1)
+m.elapsedMs = 3602000
+eq(R.settle(m, {red=24}, true, "death").total, -202)
+eq(m.best, -1, "later deaths do not deduct previous results")
+R.startRun(m, "seed3")
+eq(m.run.penaltyDeaths, 2)
+eq(R.award(m, "endpoint", 2000, "bossPoints"), true)
+eq(R.award(m, "endpoint", 2000, "bossPoints"), false)
+eq(R.settle(m, {}, false, "mega").total, 1598)
+eq(m.status, "finished")
+eq(m.best, 1598)
+eq(pcall(R.startRun, m, "illegal"), false)
+eq(R.award(m, "late", 500, "bossPoints"), false)
+eq(R.valid(m), true)
+eq(R.valid({version=999}), false)
+
+eq(R.bossKeys(1, 0, true, 1), "floorboss:1")
+eq(R.bossKeys(1, 0, true, 2), "floorboss:2")
+eq(R.bossKeys(2, 0, false, 1), "floorboss:2", "XL second boss and ordinary second depth share quota")
+eq(R.bossKeys(2, 4, false, 1), "floorboss:3", "alternate path depth")
+local json = require("json")
+local restored = json.decode(json.encode(m))
+eq(R.valid(restored), true)
+eq(restored.best, 1598)
+eq(restored.run.awards.endpoint, true)
+print("Rules: " .. checks .. " assertions passed")
