@@ -1,10 +1,10 @@
-# 饿啊杯 ea_match — 0.1.4
+# 饿啊杯 ea_match — 0.1.5
 
 独立比赛 Mod，源于 bisai9 的比赛规则和路线辅助，使用重新编写的计分与比赛记录。
 
 ## 使用
 
-1. 将整个 `ea_match` 文件夹放在游戏的 `mods`(`steamapps\common\The Binding of Isaac Rebirth\mods`) 目录。
+1. 将整个 `ea_match` 文件夹放在游戏的 `mods`(`steamapps\common\The Binding of Isaac Rebirth\mods`) 目录。支持带版本号或分支后缀的目录名，例如 `ea_match-1.0.0`、`ea_match-main`；`main.lua` 和 `metadata.xml` 应直接位于该目录下，字体目录 `resources/font/ea_match` 保持原名并保留全部文件。
 2. 使用原版忏悔（Repentance／Repentance+）即可，无需安装 REPENTOGON。已安装它也可以使用，但不是必需依赖。
 3. 关闭 `bisai9`、`bisai` 以及其他比赛规则 Mod，启用“饿啊杯 ea_match”。重启游戏，避免旧脚本或 Boss Rush 资源覆盖仍在内存里。
 4. 新开局后，用向上／向下射击键选择终点，回车或主动道具键确认。

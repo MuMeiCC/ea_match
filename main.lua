@@ -22,8 +22,15 @@ local function loadFont()
     end
     local _, searchPaths = pcall(require, "")
     if type(searchPaths) == "string" then
-        local base = searchPaths:match("(%a:[/\\][^'\r\n]-[/\\]mods[/\\]ea_match[/\\])")
-        if base then table.insert(paths, base .. suffix) end
+        -- Resolve full paths from Lua's module search list, including ZIP folder
+        -- suffixes such as ea_match-main and ea_match-1.0.0. Font.Load itself
+        -- does not accept a wildcard. Try every matching candidate.
+        for candidate in searchPaths:gmatch("['\"]([^'\"\r\n]+)['\"]") do
+            candidate = candidate:gsub("\\", "/")
+            local base = candidate:match("^(.-/mods/ea_match[^/]*/)")
+                or candidate:match("^(mods/ea_match[^/]*/)")
+            if base then table.insert(paths, base .. suffix) end
+        end
     end
     table.insert(paths, "mods/ea_match/" .. suffix)
     table.insert(paths, "../mods/ea_match/" .. suffix)
@@ -499,7 +506,7 @@ mod:AddCallback(ModCallbacks.MC_POST_RENDER, function()
     if not loaded and not match then return end
     if not loadFont() then
         Isaac.RenderText("EA Match: font could not be loaded. Match clock stopped.", 20, 65, 1, 0.8, 0.2, 1)
-        Isaac.RenderText("Check mods/ea_match/resources/font/ea_match and log.txt.", 20, 80, 1, 1, 1, 1)
+        Isaac.RenderText("Check your mod's resources/font/ea_match folder and log.txt.", 20, 80, 1, 1, 1, 1)
         return
     end
     clock()
