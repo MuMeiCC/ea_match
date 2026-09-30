@@ -2,6 +2,7 @@
 local R = {}
 R.version = 1
 R.limit = 3600
+R.itemLimit = 50
 R.targets = {
     { key = "mega", name = "大撒旦" },
     { key = "mother", name = "母亲" },
@@ -10,7 +11,7 @@ R.targets = {
     { key = "blue", name = "小蓝人" },
     { key = "delirium", name = "精神错乱" },
 }
-R.banned = { [482] = true, [636] = true, [721] = true }
+R.banned = { [481] = true, [482] = true, [636] = true, [721] = true }
 R.special = {
     [52] = 50, [149] = 50, [168] = 50, [206] = 50,
     [222] = 50, [258] = 200, [276] = 150, [299] = 100,
@@ -21,6 +22,55 @@ R.hiddenAchievements = {
     lostSoul = { name = "呃啊", points = 666 },
     suicideKing = { name = "自杀之王", points = 1000 },
 }
+
+-- Keep one entry per held copy. Removed copies leave the queue; newly observed
+-- copies join its tail. Shuffle each newly observed batch once, per held copy.
+function R.trackItems(run, inventory)
+    local remaining, byId, ids = {}, {}, {}
+    for _, item in ipairs(inventory.items or {}) do
+        if not R.banned[item.id] then
+            remaining[item.id] = item.count
+            byId[item.id] = item
+            table.insert(ids, item.id)
+        end
+    end
+    local order = {}
+    for _, id in ipairs(run.itemOrder or {}) do
+        if (remaining[id] or 0) > 0 then
+            table.insert(order, id)
+            remaining[id] = remaining[id] - 1
+        end
+    end
+    table.sort(ids)
+    local added = {}
+    for _, id in ipairs(ids) do
+        for _ = 1, remaining[id] do table.insert(added, id) end
+    end
+    if #added > 1 then
+        -- Independent, saved random stream: never consumes the game's RNG.
+        local state = run.itemOrderRng
+        if not state then
+            state = 1
+            for i = 1, #(run.seed or "") do
+                state = (state * 131 + run.seed:byte(i)) % 2147483647
+            end
+            if state == 0 then state = 1 end
+        end
+        for i = #added, 2, -1 do
+            state = (state * 48271) % 2147483647
+            local j = state % i + 1
+            added[i], added[j] = added[j], added[i]
+        end
+        run.itemOrderRng = state
+    end
+    for _, id in ipairs(added) do table.insert(order, id) end
+    run.itemOrder = order
+    inventory.scoreItems = {}
+    for i = 1, math.min(#order, R.itemLimit) do
+        local item = byId[order[i]]
+        table.insert(inventory.scoreItems, { id = item.id, count = 1, quality = item.quality })
+    end
+end
 
 function R.inventory(v, dead)
     local coins = v.coins or 0
@@ -36,10 +86,14 @@ function R.inventory(v, dead)
         local n = v[name] or 0
         result[name] = math.min(n, 10) * 10 + math.max(n - 10, 0) * 3
     end
-    for _, item in ipairs(v.items or {}) do
+    local slots = R.itemLimit
+    for _, item in ipairs(v.scoreItems or v.items or {}) do
         if not R.banned[item.id] then
-            result.items = result.items + item.count *
+            local count = math.min(item.count, slots)
+            result.items = result.items + count *
                 (50 + (item.quality == 4 and 50 or 0) + (R.special[item.id] or 0))
+            slots = slots - count
+            if slots == 0 then break end
         end
     end
     result.trinkets = (v.trinkets or 0) * 20 + (v.goldTrinkets or 0) * 40
@@ -59,7 +113,7 @@ end
 
 function R.startRun(match, seed)
     assert(match.status == "ready" or match.status == "between", "Only a death permits another run")
-    match.run = { seed = seed, awards = {},
+    match.run = { seed = seed, awards = {}, itemOrder = {},
         bossPoints = 0, secretPoints = 0, settled = false, lastInventory = {},
         -- Generation changes on a real new floor / Forget Me Now, not on continue.
         generation = 0, floor = "", pendingDeaths = {} }

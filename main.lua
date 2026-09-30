@@ -109,7 +109,11 @@ end
 
 local function refreshInventory()
     local ok, result = pcall(Inventory.read)
-    if ok then match.run.lastInventory = result; return result end
+    if ok then
+        Rules.trackItems(match.run, result)
+        match.run.lastInventory = result
+        return result
+    end
     blocked = "读取物品失败，请查看游戏日志"
     Isaac.DebugString(tostring(result))
     return match.run.lastInventory
