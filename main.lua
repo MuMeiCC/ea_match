@@ -55,6 +55,8 @@ local dirty = false
 local scoreBoardVisible = true
 local restartAt = nil
 local awaitingDirectRestart = false
+local deathMenuBackRequested = false
+local trophyPresentationSprite = nil
 
 local function removeDonationMachines()
     -- Remove without destruction effects or changing saved donation totals.
@@ -329,6 +331,8 @@ mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
     end
     local continueMatch = awaitingDirectRestart
     awaitingDirectRestart = false
+    deathMenuBackRequested = false
+    trophyPresentationSprite = nil
     active, loaded, blocked = true, true, nil
     loadFont()
     lastMs, lastSave = Isaac.GetTime(), Isaac.GetTime()
@@ -445,6 +449,7 @@ mod:AddCallback(ModCallbacks.MC_POST_GAME_END, function(_, gameOver)
     if gameOver then
         finish(true, "死亡")
         awaitingDirectRestart = match and match.status == "between" or false
+        deathMenuBackRequested = false
     elseif match and match.status == "running" then
         -- An unrelated ending is not an authorized endpoint.
         blocked = "未击败比赛终点，请保留记录并联系裁判"
@@ -456,13 +461,17 @@ end)
 
 mod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, function(_, shouldSave)
     local restarting = Input.IsButtonPressed(Keyboard.KEY_R, 0)
+    local returningToMenu = deathMenuBackRequested
+        or Input.IsButtonPressed(Keyboard.KEY_ESCAPE, 0)
     if game:GetNumPlayers() > 0 then
         restarting = restarting or Input.IsActionPressed(ButtonAction.ACTION_RESTART,
             Isaac.GetPlayer(0).ControllerIndex)
+        returningToMenu = returningToMenu or Input.IsActionPressed(ButtonAction.ACTION_MENUBACK,
+            Isaac.GetPlayer(0).ControllerIndex)
     end
-    -- Leaving for the main menu ends the direct-restart flow. A saved death
-    -- alone must not make a later New Game inherit the previous competition.
-    if shouldSave or not restarting then
+    -- The death menu's RESTART is not ACTION_RESTART. Keep the continuation
+    -- established by GAME_END unless the player explicitly returns to the menu.
+    if shouldSave or returningToMenu or (not awaitingDirectRestart and not restarting) then
         awaitingDirectRestart = false
         restartAt = nil
     end
@@ -487,8 +496,11 @@ mod:AddCallback(ModCallbacks.MC_INPUT_ACTION, function(_, entity, hook, action)
     if active and action == ButtonAction.ACTION_PAUSE and hook == InputHook.IS_ACTION_TRIGGERED
         and Input.IsButtonTriggered(Keyboard.KEY_F4, 0) then return true end
     -- Settlement freezes scores, not player controls. F6 can hide the result panel.
-    local freeze = active and fontReady and (menu or blocked)
-    if freeze and entity and action <= ButtonAction.ACTION_DROP then
+    local trophyResult = active and match and match.run and match.run.ending
+        and match.run.ending.awaitingConfirm
+    local freeze = active and fontReady and (menu or blocked or trophyResult)
+    if (freeze and entity and action <= ButtonAction.ACTION_DROP)
+        or (trophyResult and action == ButtonAction.ACTION_RESTART) then
         if hook == InputHook.GET_ACTION_VALUE then return 0 end
         return false
     end
@@ -503,6 +515,14 @@ local function timeText(ms)
     return string.format("%02d:%02d", math.floor(s / 60), s % 60)
 end
 mod:AddCallback(ModCallbacks.MC_POST_RENDER, function()
+    -- Remember Back before the engine consumes it and calls PRE_GAME_EXIT.
+    if loaded and awaitingDirectRestart and not active and game:GetNumPlayers() > 0 then
+        local controller = Isaac.GetPlayer(0).ControllerIndex
+        if Input.IsButtonTriggered(Keyboard.KEY_ESCAPE, 0)
+            or Input.IsActionTriggered(ButtonAction.ACTION_MENUBACK, controller) then
+            deathMenuBackRequested = true
+        end
+    end
     if not loaded and not match then return end
     if not loadFont() then
         Isaac.RenderText("EA Match: font could not be loaded. Match clock stopped.", 20, 65, 1, 0.8, 0.2, 1)
@@ -533,7 +553,18 @@ mod:AddCallback(ModCallbacks.MC_POST_RENDER, function()
         return
     end
     if not match then return end
-    if Input.IsButtonTriggered(Keyboard.KEY_F6, 0) then
+    local ending = match.run and match.run.ending
+    if active and ending and ending.awaitingConfirm then
+        scoreBoardVisible = true
+        if not game:IsPaused() and Isaac.GetPlayer(0):IsExtraAnimationFinished()
+            and Input.IsButtonTriggered(Keyboard.KEY_ENTER, 0) then
+            ending.awaitingConfirm = false
+            save()
+            local endings = { lamb = 6, blue = 7, mega = 8, delirium = 11, mother = 13, beast = 14 }
+            game:End(endings[ending.reason])
+            return
+        end
+    elseif Input.IsButtonTriggered(Keyboard.KEY_F6, 0) then
         scoreBoardVisible = not scoreBoardVisible
     end
     if not scoreBoardVisible then return end
@@ -549,7 +580,9 @@ mod:AddCallback(ModCallbacks.MC_POST_RENDER, function()
             local deathPanel = match.status == "between"
             local panelX = deathPanel and 12 or 130
             draw(deathPanel and "本局死亡" or "比赛结束", panelX, 100, yellow)
-            draw(deathPanel and "F6 显示/隐藏" or "F6 隐藏／显示计分板", panelX, 84, yellow)
+            local hint = ending and ending.awaitingConfirm and "按回车结束本局"
+                or (deathPanel and "F6 显示/隐藏" or "F6 隐藏／显示计分板")
+            draw(hint, panelX, 84, yellow)
             if deathPanel then
                 -- Keep each line inside the left margin of the native death screen.
                 draw("本局：" .. result.total, panelX, 116)
@@ -576,6 +609,26 @@ mod:AddCallback(ModCallbacks.MC_POST_RENDER, function()
 end)
 
 -- Vanilla interception: pool draws, spawning, morphed pedestals and collisions.
+mod:AddCallback(ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, pickup, collider)
+    local player = collider:ToPlayer()
+    local ending = match and match.run and match.run.ending
+    if not active or not player or not ending or match.status ~= "finished" then return end
+    local level = game:GetLevel()
+    if ending.stage ~= level:GetStage() or ending.seed ~= level:GetDungeonPlacementSeed()
+        or ending.room ~= level:GetCurrentRoomDesc().ListIndex then return end
+    if not ending.awaitingConfirm then
+        ending.awaitingConfirm = true
+        scoreBoardVisible = true
+        trophyPresentationSprite = Sprite()
+        trophyPresentationSprite:Load(pickup:GetSprite():GetFilename(), true)
+        trophyPresentationSprite:SetFrame(pickup:GetSprite():GetAnimation(), 0)
+        player:AnimatePickup(trophyPresentationSprite)
+        save()
+    end
+    pickup:Remove()
+    return true -- Suppress the native trophy's automatic ending.
+end, PickupVariant.PICKUP_TROPHY)
+
 -- Direct AddCollectible/crafting is cleaned by Inventory.removeBanned.
 mod:AddCallback(ModCallbacks.MC_POST_GET_COLLECTIBLE, function(_, id, pool, decrease, seed)
     if not Rules.banned[id] then return end
