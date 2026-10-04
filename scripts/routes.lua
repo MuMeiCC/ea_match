@@ -1,6 +1,25 @@
 -- Route assistance adapted from bisai9. No ambush.xml override: vanilla Boss Rush.
 return function()
     local Routes = {}
+    function Routes.removeBeastBloodDoor(target)
+        if target ~= "beast" then return end
+        local level, room = Game():GetLevel(), Game():GetRoom()
+        if level:IsAscent() or room:GetType() ~= RoomType.ROOM_BOSS then return end
+        local stage = level:GetStage()
+        local alt = level:GetStageType() >= StageType.STAGETYPE_REPENTANCE
+        local xl = (level:GetCurses() & LevelCurse.CURSE_OF_LABYRINTH) ~= 0
+        -- Depths I or Mines II (including Mines XL): both lead to Mausoleum I.
+        -- The photograph door on Depths II is outside this scope.
+        if not ((not alt and stage == 5)
+            or (alt and (stage == 4 or (xl and stage == 3)))) then return end
+        for slot = 0, 7 do
+            local door = room:GetDoor(slot)
+            if door and door.TargetRoomType == RoomType.ROOM_SECRET_EXIT then
+                room:RemoveDoor(slot)
+            end
+        end
+    end
+
     function Routes.npcDied(target, run, npc, roomKey)
         local level = Game():GetLevel()
         if target == "mother" and npc.Type == 78 and not level:IsAscent()

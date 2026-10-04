@@ -437,6 +437,7 @@ mod:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
     end
     if not match or match.status ~= "running" then return end
     if dirtyRoom then enterRoom() end
+    Routes.removeBeastBloodDoor(target())
     clock()
     processBosses()
     if match.status ~= "running" then return end
@@ -578,25 +579,18 @@ mod:AddCallback(ModCallbacks.MC_POST_RENDER, function()
         local result = match.results[#match.results]
         if result then
             local deathPanel = match.status == "between"
-            local panelX = deathPanel and 12 or 130
-            draw(deathPanel and "本局死亡" or "比赛结束", panelX, 100, yellow)
+            local panelX = 130
+            draw(deathPanel and "本局死亡，可重新开局" or "比赛结束", panelX, 100, yellow)
             local hint = ending and ending.awaitingConfirm and "按回车结束本局"
-                or (deathPanel and "F6 显示/隐藏" or "F6 隐藏／显示计分板")
+                or "F6 隐藏／显示计分板"
             draw(hint, panelX, 84, yellow)
-            if deathPanel then
-                -- Keep each line inside the left margin of the native death screen.
-                draw("本局：" .. result.total, panelX, 116)
-                draw("最高：" .. match.best, panelX, 128)
-            else
-                draw("本局：" .. result.total .. "  比赛最高：" .. match.best, 110, 120)
-            end
+            draw("本局：" .. result.total .. "  比赛最高：" .. match.best, 110, 120)
             local labels = { {"time", "时间"}, {"coins", "金币"}, {"bombs", "炸弹"},
                 {"keys", "钥匙"}, {"consumables", "卡牌/药丸/符文"}, {"hearts", "血量"},
                 {"items", "道具"}, {"trinkets", "饰品"}, {"bosses", "Boss"},
                 {"secrets", "隐藏房"}, {"forms", "套装"} }
             for i, pair in ipairs(labels) do
                 local label = pair[2]
-                if deathPanel and pair[1] == "consumables" then label = "消耗品" end
                 draw(label .. "：" .. result.scores[pair[1]], panelX, 136 + i * 12)
             end
             for i, achievement in ipairs(result.achievements or {}) do
