@@ -22,22 +22,6 @@ return function()
         end
     end
 
-    function Routes.removeMegaDetour(target)
-        if target ~= "mega" then return end
-        local level, room = Game():GetLevel(), Game():GetRoom()
-        if level:GetStage() ~= 11 or room:GetType() ~= RoomType.ROOM_BOSS
-            or not room:IsClear() or level:GetCurrentRoomDesc().GridIndex < 0 then return end
-        -- Regular Chest/Dark Room boss rooms only; Mega Satan uses a special room.
-        -- Check after spawning too, since the portal can appear after the clear event.
-        for i = 0, room:GetGridSize() - 1 do
-            local grid = room:GetGridEntity(i)
-            if grid and grid:GetType() == GridEntityType.GRID_TRAPDOOR
-                and grid:GetVariant() == 1 then -- Void portal
-                room:RemoveGridEntity(i, 0, false)
-            end
-        end
-    end
-
     function Routes.removeBeastBloodDoor(target)
         if target ~= "beast" then return end
         local level, room = Game():GetLevel(), Game():GetRoom()

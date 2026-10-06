@@ -439,7 +439,6 @@ mod:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
     if dirtyRoom then enterRoom() end
     Routes.removeBeastBloodDoor(target())
     Routes.closeBeastTrapdoors(target())
-    Routes.removeMegaDetour(target())
     clock()
     processBosses()
     if match.status ~= "running" then return end
