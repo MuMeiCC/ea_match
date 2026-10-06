@@ -65,12 +65,13 @@ return function(rules)
         end
         -- The vanilla multiplier is normal copies + 2 * gold copies + Mom's Box.
         -- This is exactly the weighting needed for 20/40 points; there is no need
-        -- to reconstruct how many of each color were swallowed. Filter virtual
-        -- trinkets (e.g. Error) and remove the box's one extra effect per type.
+        -- to reconstruct how many of each color were swallowed. Do not gate this
+        -- on HasTrinket(id, true): swallowed trinkets must remain eligible.
+        -- Remove the box's one extra effect per type.
         v.trinketUnits = 0
         local box = player:HasCollectible(439) and 1 or 0
         for id = 1, config:GetTrinkets().Size - 1 do
-            if config:GetTrinket(id) and player:HasTrinket(id, true) then
+            if config:GetTrinket(id) then
                 v.trinketUnits = v.trinketUnits + math.max(0, player:GetTrinketMultiplier(id) - box)
             end
         end

@@ -1,6 +1,43 @@
 -- Route assistance adapted from bisai9. No ambush.xml override: vanilla Boss Rush.
 return function()
     local Routes = {}
+    function Routes.closeBeastTrapdoors(target)
+        if target ~= "beast" then return end
+        local level, room = Game():GetLevel(), Game():GetRoom()
+        if level:IsAscent() or level:GetStageType() >= StageType.STAGETYPE_REPENTANCE then return end
+        local stage = level:GetStage()
+        local xl = (level:GetCurses() & LevelCurse.CURSE_OF_LABYRINTH) ~= 0
+        if stage ~= 6 and not (stage == 5 and xl) then return end
+        -- The Strange Door's destination room contains the required ascent entrance.
+        if room:GetType() == RoomType.ROOM_SECRET_EXIT then return end
+        for i = 0, room:GetGridSize() - 1 do
+            local grid = room:GetGridEntity(i)
+            if grid and grid:GetType() == GridEntityType.GRID_TRAPDOOR
+                and grid:GetVariant() == 0 then
+                -- Keep the actual grid entity closed, not just its appearance.
+                -- Repeat for newly dug exits and vanilla's automatic opening.
+                grid.State = 0
+                grid:GetSprite():SetFrame("Closed", 0)
+            end
+        end
+    end
+
+    function Routes.removeMegaDetour(target)
+        if target ~= "mega" then return end
+        local level, room = Game():GetLevel(), Game():GetRoom()
+        if level:GetStage() ~= 11 or room:GetType() ~= RoomType.ROOM_BOSS
+            or not room:IsClear() or level:GetCurrentRoomDesc().GridIndex < 0 then return end
+        -- Regular Chest/Dark Room boss rooms only; Mega Satan uses a special room.
+        -- Check after spawning too, since the portal can appear after the clear event.
+        for i = 0, room:GetGridSize() - 1 do
+            local grid = room:GetGridEntity(i)
+            if grid and grid:GetType() == GridEntityType.GRID_TRAPDOOR
+                and grid:GetVariant() == 1 then -- Void portal
+                room:RemoveGridEntity(i, 0, false)
+            end
+        end
+    end
+
     function Routes.removeBeastBloodDoor(target)
         if target ~= "beast" then return end
         local level, room = Game():GetLevel(), Game():GetRoom()
@@ -109,7 +146,7 @@ return function()
                 run.pendingCorpseEntrance = nil
             end
         elseif target == "beast" and name == "Mom" then
-            removeExit(0)
+            Routes.closeBeastTrapdoors(target)
             portal(Vector(320, 200))
         elseif target == "lamb" or target == "blue" then
             if name == "Mom" or name == "Mom (mausoleum)" then
@@ -122,7 +159,9 @@ return function()
                 -- Hush's cleared boss room offers the same two onward routes.
                 removeExit(target == "lamb" and 1 or 0)
             end
-        elseif target == "mega" and name == "It Lives!" then
+        elseif (target == "mega" and name == "It Lives!")
+            or (target == "delirium" and level:GetStage() == 9) then
+            -- For Delirium, keep the post-Hush route matching the held photograph.
             if p:HasCollectible(328) and not p:HasCollectible(327) then removeExit(1)
             elseif p:HasCollectible(327) and not p:HasCollectible(328) then removeExit(0) end
         end
